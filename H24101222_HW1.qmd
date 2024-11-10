@@ -1,0 +1,389 @@
+---
+title: "HW1"
+subtitle: "The Algorithm and Implementation of Gauss-Jordan Elimination, Sweep Operator, and Power Method"
+date: today
+author: 陳凱騫
+format:
+ pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+         \setmonofont{Microsoft JhengHei UI} 
+mainfont: "Microsoft JhengHei UI"
+toc: true
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+---
+
+# 1. Gauss-Jordan Elimination
+
+## Algorithm and Code
+
+它包含了三個主要部分：行交換 (`row_switch`)，行處理（`gjrp`），以及高斯-喬登算法（`Gauss_Jordan` 和 `Gauss_Jordan2`）。我們可以將這段程式碼整理為一個清晰的算法流程，如下所示：
+
+
+### Gauss-Jordan Elimination Algorithm
+
+**Input:**
+
+A matrix ( A ) of size $m \times n$ .
+
+**Output:**
+
+A matrix in **reduced row echelon form (RREF)**.
+
+
+**Step 1: Row Switching**
+
+**Function**: `row_switch(matrix1, r)`
+
+1.  Set `row1` to be the $r^{th}$ row of the matrix.
+
+2.  Starting from the $r^{th}$ row, check each row below it:
+
+    -   If a non-zero element is found in the $r^{th}$ column, switch the $r^{th}$ row with that row.
+
+    -   If no such row is found, issue a warning that the matrix might be singular (no non-zero pivot in this column).
+
+3.  Return the updated matrix.
+
+
+### Step 2: Forward Elimination
+
+**Function**: `gjrp(matrix1, r)`
+
+1.  If the value (assume a is the value) in $r^{th}$ column and $r^{th}$ row is not equal to zero then multiply $\frac{1}{a}$ to let it be 1.
+
+2.  Add/subtract multiples of the $r^{th}$ row to the other rows(the row smaller than r) so that all other entries which below the $r^{th}$ rows in the column are all zero.
+
+### Step 3: Full Gauss-Jordan Forward Elimination
+
+**Function**: `Gauss_Jordan(matrix1)`
+
+1.  For each row ( i ) from 1 to ( m ):
+
+    -   If the diagonal element ( matrix1\[i, i\] ) is 0, call `row_switch(matrix1, i)` to swap rows and ensure a non-zero value occur.
+
+    -   Call `gjrp(matrix1, i)` to perform forward elimination on the matrix, processing the $i^{th}$ row and eliminating entries below it.
+
+2.  Return the updated matrix.
+
+
+### Step 4: Backward Elimination (Refinement to RREF)
+
+**Function**: `Gauss_Jordan2(matrix1)`
+
+1.  For each row ( row1 ) from 2 to ( m ):
+
+    -   For each row ( i ) above ( row1 ) (i.e., from ( $row1$ -1 ) to 1):
+
+    -   Subtract a suitable multiple of the $row1^{th}$ row from the $i^{th}$ row to eliminate all elements above the pivot.
+
+2.  Return the updated matrix.
+
+
+### Final Algorithm: Full Gauss-Jordan Elimination
+
+1.  Call `Gauss_Jordan(matrix1)` to perform the forward elimination, reducing the matrix to an upper triangular form (Gaussian elimination).
+2.  Call `Gauss_Jordan2(matrix1)` to perform the backward elimination, refining the matrix into **reduced row echelon form (RREF)**.
+
+### Code Implementation and example
+
+```{r,echo=FALSE}
+# function
+row_switch  <- function(matrix1, r) {
+  row1 <- matrix1[r, ]
+  switched <- FALSE
+  for (k in r:nrow(matrix1)) {
+    if (matrix1[k, r] != 0) {
+      matrix1[r, ] <- matrix1[k, ]
+      matrix1[k, ] <- row1
+      switched <- TRUE
+      break
+    }
+  }
+  if (!switched) {
+    warning("No non-zero pivot found; matrix might be singular.")
+  }
+  return(matrix1)
+}
+
+gjrp <- function(matrix1,r){
+  matrix1[r, ] <- matrix1[r, ] / matrix1[r, r]
+  # r不是最後一行就進行row_process
+  if (r!=nrow(matrix1)) {
+    for (k in 1:(nrow(matrix1)-r)) {
+      # 2. 把下面(k,i)都變成0
+      matrix1[r+k,] <- matrix1[r+k,]- matrix1[r,]*matrix1[r+k,r]
+      
+    }
+  }
+  return(matrix1)
+}
+
+Gauss_Jordan <- function(matrix1) {
+  for (i in 1:nrow(matrix1)) {
+    if(matrix1[i,i]==0) {matrix1<- row_switch(matrix1,r=i)}
+    matrix1 <- gjrp(matrix1 = matrix1,r = i)
+  }
+  return(matrix1)
+}
+Gauss_Jordan2 <- function(matrix1) {
+  for (row1 in 2:nrow(matrix1)) {
+    for (i in (row1-1):1) {
+      matrix1[i,] <- matrix1[i,]-matrix1[row1,]*matrix1[i,row1] #往上減
+    }
+  }
+  return(matrix1)
+}
+```
+```{r,echo=FALSE}
+# 創造自動製造Identity matrix的function
+CreateIM <- function(matrix1){
+  if(nrow(matrix1)==ncol(matrix1)){
+      IdenM1 <- matrix(rep(0,nrow(matrix1)*ncol(matrix1)), nrow = nrow(matrix1))
+  for(i in 1:nrow(IdenM1)){
+    IdenM1[i,i] <- 1
+  }
+
+  }else {
+     warning("Cannot Create a Identity Matrix")
+  }
+  return(IdenM1)
+}
+# 利用上方function與原matrix合併做elimination以求inverse matrix
+FindInver <- function(matrix1){
+  Result1 <-Gauss_Jordan2(Gauss_Jordan(cbind(matrix1,CreateIM(matrix1))));Result1
+  Inver <- (nrow(CreateIM(matrix1))+1):(2*nrow(CreateIM(matrix1)));Inver
+  InverM <- Result1[,Inver]
+
+  return(InverM)
+}
+```
+
+```{r,echo=FALSE}
+# 測試代碼：3x3 矩陣
+A3 <- matrix(c(4, 1, 2, 1, 5, 3, 2, 3, 6), nrow = 3, byrow = TRUE)
+cat("3x3 matrix :\n")
+print(A3)
+cat("3x3 matrix inverse:\n")
+print(FindInver(A3))
+
+# 測試代碼：4x4 矩陣
+A4 <- matrix(c(10, 2, 3, 4, 2, 8, 1, 5, 3, 1, 9, 6, 4, 5, 6, 11), nrow = 4, byrow = TRUE)
+cat("4x4 matrix :\n")
+print(A4)
+cat("4x4 matrix inverse:\n")
+print(FindInver(A4))
+```
+
+```{r}
+FindInver(A3) %*% A3
+FindInver(A4) %*% A4
+```
+
+From the result above, we can really know the inverse matrix is what we want。
+
+# 2. Sweep Operator
+
+## Algorithm and Code
+
+此部分包含Sweep Operator的步驟說明和R程式碼。Sweep Operator可以有效計算對稱矩陣的逆矩陣。
+
+### Sweep Operator Algorithm
+
+Suppose we have an $n \times n$ symmetric matrix $A$, and we want to compute its inverse $A^{-1}$. This algorithm uses the sweep operator to calculate $-A^{-1}$ and then takes the negative of the result to obtain $A^{-1}$.
+
+### Variables
+
+- **A**: An $n \times n$ symmetric matrix, assumed to be positive definite.
+- **k**: The current index of the diagonal element to sweep.
+- **`inverse`**: If `TRUE`, this performs a reverse sweep operation, restoring the matrix to its original state.
+
+### Algorithm Steps
+
+1.  **Input**: Define a symmetric $n \times n$ matrix $A$.
+    -   **Output**: $A^{-1}$
+
+2.  **Perform the sweep operation for each specified index $k$**:
+
+    -   Retrieve the diagonal element $a_{kk}$.
+
+    -   **Update the diagonal element**: 
+        $$ a_{kk} = -\frac{1}{a_{kk}} $$
+
+    -   **Update other elements in the $k$-th row and $k$-th column** (excluding $a_{kk}$):
+
+        -   For each $i \neq k$, update the elements in the $k$-th row and $k$-th column:
+
+            $$ a_{ik} = \frac{a_{ik}}{a_{kk}} $$
+
+            $$ a_{ki} = a_{ik} $$ 
+
+            If performing a reverse sweep (`inverse = TRUE`):
+
+            $$ a_{ik} = -\frac{a_{ik}}{a_{kk}} $$
+
+            $$ a_{ki} = a_{ik} $$
+
+    -   **Update all other elements not in the $k$-th row or $k$-th column**:
+
+        -   For each $i \neq k$ and $j \neq k$, update the element:
+
+            $$ a_{ij} = a_{ij} - \frac{ a_{ik} \cdot a_{kj} }{a_{kk}} $$
+
+3.  **Take the negative of the matrix upon completion**:
+
+    -   After performing the sweep operation on each diagonal element, the final result is $-A^{-1}$.
+    -   To obtain $A^{-1}$, take the negative of the matrix, yielding $A^{-1}$.
+
+
+### Code Implementation
+
+```{r,echo= FALSE}
+# 定義 sweep operator 函數
+sweep_operator <- function(A, indices, inverse = FALSE) {
+  for (k in indices) {
+    akk <- A[k, k]
+    A[k, k] <- -1 / akk
+    for (i in 1:nrow(A)) {
+      for (j in 1:ncol(A)) {
+        if (i != k && j != k) {
+          A[i, j] <- A[i, j] - (A[i, k] * A[k, j]) / akk
+        }
+      }
+    }
+    for (i in 1:nrow(A)) {
+      if (i != k) {
+        A[i, k] <- if (inverse) -A[i, k] / akk else A[i, k] / akk
+        A[k, i] <- A[i, k]
+      }
+    }
+  }
+  return(-A)  # 返回取負號後的結果以獲得 A 的逆矩陣
+}
+```
+```{r,echo=FALSE}
+# 測試代碼：3x3 矩陣
+A3 <- matrix(c(4, 1, 2, 1, 5, 3, 2, 3, 6), nrow = 3, byrow = TRUE)
+cat("3x3 matrix :\n")
+print(A3)
+cat("3x3 matrix inverse:\n")
+print(sweep_operator(A3, 1:3))
+
+# 測試代碼：4x4 矩陣
+A4 <- matrix(c(10, 2, 3, 4, 2, 8, 1, 5, 3, 1, 9, 6, 4, 5, 6, 11), nrow = 4, byrow = TRUE)
+cat("4x4 matrix :\n")
+print(A4)
+cat("4x4 matrix inverse:\n")
+print(sweep_operator(A4, 1:4))
+```
+
+```{r}
+sweep_operator(A3, 1:3) %*% A3
+sweep_operator(A4, 1:4) %*% A4
+```
+
+From the result above, we can really know the inverse matrix is what we want。
+
+# 3. Power Method
+
+## Algorithm and Code
+
+此部分涵蓋 Power Method 的算法描述和 R 程式碼實現，用於計算方陣的最大和次大特徵值。
+
+### Power Method Algorithm
+
+The Power Method to find the largest eigenvalue follows these steps:
+1. **Input**: square matrix $A$
+    - **Output**: $\lambda$
+
+2. **Initialize** a random vector $u_1$ with the same dimension as the square matrix $A$.
+   
+3. **Normalize** the vector $u_1$ by dividing it by its norm to prevent numerical overflow or underflow.
+
+4. **Iteratively apply** the matrix $A$ to the vector $u_1$ :
+    - $u_{k+1} = A \cdot u_k$
+    - Normalize the new vector $u_{k+1}$.
+
+5. **Estimate the eigenvalue** as the norm of the vector $u_{k+1}$: 
+    - $\lambda = \| A \cdot u_k \|$
+
+6. **Repeat steps 3 and 4** until the difference between successive eigenvalue estimates is smaller than a given tolerance, or a maximum number of iterations is reached.
+
+7. **Return** the dominant eigenvalue $\lambda$ and its corresponding eigenvector $u_k$.
+
+### Code Implementation
+```{r,echo=FALSE}
+power_method <- function(matrix1, max_iter = 1000, tol = 1e-10) {
+  # 任意選取向量 u1，並進行正規化
+  u1 <- runif(nrow(matrix1))
+  u1 <- u1 / sqrt(sum(u1^2))
+  iter <- 0  # 初始化迭代計數
+  eigenvalue0 <- 0  # 初始化特徵值
+  differ <- tol + 1  # 初始化差異，使其大於容差
+  while (iter <= max_iter && differ > tol) {
+    iter <- iter + 1
+    # 計算 A * u1
+    result1 <- matrix1 %*% u1
+    # 計算特徵值（向量的範數）
+    eigenvalue1 <- sqrt(sum(result1^2))
+    # 正規化向量 u1
+    u1 <- result1 / eigenvalue1
+    # 計算特徵值的變化量
+    differ <- abs(eigenvalue1 - eigenvalue0)
+    # 更新特徵值
+    eigenvalue0 <- eigenvalue1
+  }
+  # 定義容差
+  tolerance <- 1e-3
+  # 檢查是否需要反轉特徵值的符號
+  vector1 <- matrix1 %*% u1
+  vector2 <- eigenvalue1 * u1
+  same_vectors <- all(abs(vector1 - vector2) < tolerance)
+  if (!same_vectors) {
+    eigenvalue1 <- -eigenvalue1
+  }
+  # 返回結果：最大特徵值、特徵向量和迭代次數
+  return(list(eigenvalue = eigenvalue1, eigenvector = u1, iterations = iter))
+}
+```
+
+```{r,echo=FALSE}
+# 測試矩陣
+# 4x4 matrix example
+m1 <- matrix(c(4, 1, -2, 2,
+               1, 3, -1, 1,
+               -2, -1, 3, -2,
+               2, 1, -2, 4), nrow = 4, byrow = TRUE)
+
+# Print the matrix
+cat("舉例之4x4矩陣:")
+print(m1)
+
+# 執行 Power Method
+result <- power_method(m1)
+
+# 打印結果
+cat("絕對值後最大特徵值：", result$eigenvalue, "\n")
+cat("對應的特徵向量：", result$eigenvector, "\n")
+cat("迭代次數：", result$iterations, "\n")
+```
+```{r,echo=FALSE}
+result$eigenvalue * result$eigenvector
+# new matric(TO FIND OUT THE SECOND LAGEST ABSOLUTE EIGENVALUE)
+m1_1 <- m1 - power_method(m1)$eigenvalue * power_method(m1)$eigenvector %*% t(power_method(m1)$eigenvector)
+m1_1
+# SECOND LAGEST ABSOLUTE EIGENVALUE
+cat("Power Method之結果:")
+print(power_method(m1)$eigenvalue)
+print(power_method(m1_1)$eigenvalue)
+# R function
+cat("R function中的eigen()之結果:")
+print(eigen(m1)$values[1:2])
+```
+

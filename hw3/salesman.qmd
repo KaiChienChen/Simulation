@@ -1,0 +1,347 @@
+---
+title: "HW3"
+subtitle: "Simulated Annealing for the Travelling Salesman Problem"
+date: today
+author: 陳凱騫
+format:
+  pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+         \setmonofont{Microsoft JhengHei UI} 
+mainfont: "Microsoft JhengHei UI"
+toc: true
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+---
+
+
+
+```{r generate_reward}
+# Load necessary libraries
+set.seed(123)  # For reproducibility
+
+# Step 1: Generate Random Rewards U_ij
+n_cities <- 10
+U_ij <- matrix(runif(n_cities * n_cities, 1, 10), nrow = n_cities, ncol = n_cities)
+diag(U_ij) <- 0  # No reward for staying in the same city
+
+# Generate rewards for starting from city 0 to each city
+U_0k <- runif(n_cities, 1, 10)
+
+# Objective Function: Calculate total reward for a given route
+calculate_reward <- function(route, U_ij, U_0k) {
+  total_reward <- U_0k[route[1]]  # Reward for starting from city 0
+  for (i in 1:(length(route) - 1)) {
+    total_reward <- total_reward + U_ij[route[i], route[i + 1]]
+  }
+  return(total_reward)
+}
+```
+
+```{r SA_algorithm}
+simulated_annealing <- function(U_ij, U_0k, max_iter = 5000, T_init = 100, cooling_rate = 0.99) {
+  # Initialize temperature
+  T <- T_init
+  
+  # Generate initial random route
+  current_route <- sample(1:n_cities)
+  current_reward <- calculate_reward(current_route, U_ij, U_0k)
+  
+  # Track the best solution
+  best_route <- current_route
+  best_reward <- current_reward
+  
+  # Simulated Annealing Loop
+  for (iter in 1:max_iter) {
+    # Generate a neighboring solution: Swap two cities
+    new_route <- current_route
+    swap_idx <- sample(1:n_cities, 2)  # Select two random cities to swap
+    new_route[swap_idx] <- new_route[rev(swap_idx)]  # Swap cities
+    
+    # Calculate reward for the new route
+    new_reward <- calculate_reward(new_route, U_ij, U_0k)
+    
+    # Acceptance probability (based on temperature and reward difference)
+    delta <- new_reward - current_reward
+    if (delta > 0 || runif(1) < exp(delta / T)) {
+      # Accept the new solution
+      current_route <- new_route
+      current_reward <- new_reward
+      
+      # Update the best solution if the new reward is better
+      if (current_reward > best_reward) {
+        best_route <- current_route
+        best_reward <- current_reward
+      }
+    }
+    
+    # Cool down the temperature
+    T <- T * cooling_rate
+    
+    # Optional: Print progress every 100 iterations
+    if (iter %% 100 == 0) {
+      cat("Iteration:", iter, "| Best Reward:", best_reward, "\n")
+    }
+  }
+  
+  # Return the best route and reward
+  return(list(best_route = best_route, best_reward = best_reward))
+}
+
+
+```
+
+```{r run_simulation}
+# Step 3: Run Simulated Annealing
+result <- simulated_annealing(U_ij, U_0k)
+```
+
+```{r result}
+# Step 4: Display Results
+cat("Optimal Route:", result$best_route, "\n")
+cat("Maximum Reward:", result$best_reward, "\n")
+
+```
+
+```{r run_multi}
+# Run Simulated Annealing Multiple Times and Store Routes
+num_runs <- 50
+results <- numeric(num_runs)            # To store rewards
+routes <- vector("list", num_runs)      # To store routes for each run
+
+for (i in 1:num_runs) {
+  result <- simulated_annealing(U_ij, U_0k)
+  results[i] <- result$best_reward       # Store best reward
+  routes[[i]] <- result$best_route       # Store corresponding best route
+  # cat("Run:", i, "| Best Reward:", results[i], "\n")
+}
+
+# Find the Maximum Reward and Its Route
+max_reward <- max(results)
+best_run_index <- which.max(results)    # Index of the maximum reward
+best_route <- routes[[best_run_index]]  # Retrieve the route for the max reward
+
+# Print Results
+cat("\nAll Best Rewards Across Runs:", results, "\n")
+cat("Maximum Reward:", max_reward, "\n")
+cat("Best Route Corresponding to Maximum Reward:", best_route, "\n")
+
+```
+
+## Visualization
+
+Visualizations can help you better understand the **performance of the Simulated Annealing (SA) algorithm**, analyze the solution quality, and visualize the traveling salesman route. Here are several visualization approaches you can use in R:
+
+
+### **1. Visualize the Convergence of Rewards**
+
+Plot the **progression of rewards** (best rewards) over iterations to analyze how the SA algorithm converges.
+
+
+#### Code:
+
+Modify the Simulated Annealing function to **track rewards** at each iteration and then plot them.
+
+```{r visualization_converge_reward}
+# Simulated Annealing with Reward Tracking
+simulated_annealing_with_tracking <- function(U_ij, U_0k, max_iter = 5000, T_init = 100, cooling_rate = 0.99) {
+  T <- T_init
+  current_route <- sample(1:n_cities)
+  current_reward <- calculate_reward(current_route, U_ij, U_0k)
+  best_route <- current_route
+  best_reward <- current_reward
+  
+  reward_progress <- numeric(max_iter)  # Track reward progression
+  
+  for (iter in 1:max_iter) {
+    new_route <- current_route
+    swap_idx <- sample(1:n_cities, 2)
+    new_route[swap_idx] <- new_route[rev(swap_idx)]
+    new_reward <- calculate_reward(new_route, U_ij, U_0k)
+    
+    delta <- new_reward - current_reward
+    if (delta > 0 || runif(1) < exp(delta / T)) {
+      current_route <- new_route
+      current_reward <- new_reward
+      if (current_reward > best_reward) {
+        best_reward <- current_reward
+      }
+    }
+    
+    reward_progress[iter] <- best_reward  # Record the best reward so far
+    T <- T * cooling_rate
+  }
+  
+  return(list(best_route = best_route, best_reward = best_reward, reward_progress = reward_progress))
+}
+
+# Run SA with tracking
+result <- simulated_annealing_with_tracking(U_ij, U_0k)
+par(mfrow=c(1,1))
+# Plot the Reward Progression
+plot(result$reward_progress, type = "l", col = "blue", lwd = 2,
+     xlab = "Iteration", ylab = "Best Reward",
+     main = "Convergence of Simulated Annealing")
+```
+
+#### **What It Shows**:
+
+- The **x-axis** represents the number of iterations.
+
+- The **y-axis** shows the best reward achieved so far.
+
+- The curve indicates how the SA algorithm converges to the best solution over time.
+
+
+### **2. Compare Rewards Across Multiple Runs**
+
+Plot a **bar chart** or **boxplot** to compare the best rewards obtained in multiple runs of the SA algorithm.
+
+#### Code:
+
+```{r multi_run_v}
+# Run SA Multiple Times and Collect Results
+num_runs <- 10
+results <- numeric(num_runs)
+
+for (i in 1:num_runs) {
+  result <- simulated_annealing(U_ij, U_0k)
+  results[i] <- result$best_reward
+}
+
+# Bar Plot of Rewards Across Runs
+barplot(results, col = "skyblue", names.arg = 1:num_runs,
+        xlab = "Run", ylab = "Best Reward",
+        main = "Best Rewards Across Multiple Runs of SA")
+
+# Boxplot for Overall Reward Distribution
+boxplot(results, col = "lightgreen",
+        ylab = "Best Reward",
+        main = "Distribution of Best Rewards Across Runs")
+```
+
+#### **What It Shows**:
+
+- The **bar chart** compares the best rewards for each run.
+
+- The **boxplot** shows the spread (range, median, outliers) of the best rewards across all runs.
+
+
+### **3. Visualize the Optimal Route (Traveling Salesman Path)**
+
+If you assume that each city has coordinates (e.g., generated randomly), you can visualize the **salesman's route** on a 2D plane.
+
+#### Code:
+
+```{r optimal_route_visual}
+# Generate Random Coordinates for Cities
+set.seed(123)
+city_coords <- data.frame(x = runif(n_cities, 0, 100), 
+                          y = runif(n_cities, 0, 100))
+city_coords <- rbind(c(50, 50), city_coords)  # Add city 0 at center (50, 50)
+
+# Function to Plot the Salesman's Route
+plot_route <- function(route, coords) {
+  # Create a complete route (start at city 0, visit all cities, return to city 0)
+  complete_route <- c(0, route, 0)
+  
+  # Plot the cities
+  plot(coords$x, coords$y, pch = 19, col = "red", cex = 1.5,
+       xlab = "X Coordinate", ylab = "Y Coordinate", 
+       main = "Traveling Salesman Optimal Route")
+  text(coords$x, coords$y, labels = 0:n_cities, pos = 3)
+  
+  # Draw the path
+  for (i in 1:(length(complete_route) - 1)) {
+    city_from <- complete_route[i] + 1  # Adjust for 0-based index
+    city_to <- complete_route[i + 1] + 1
+    segments(coords$x[city_from], coords$y[city_from], 
+             coords$x[city_to], coords$y[city_to], col = "blue", lwd = 2)
+  }
+}
+
+# Visualize the Best Route
+plot_route(result$best_route, city_coords)
+```
+
+#### **What It Shows**:
+
+- The **red points** represent the cities, with city 0 as the starting point.
+
+- The **blue lines** show the optimal path taken by the salesman to visit all cities and return to the starting city.
+
+- Labels (0 to 10) indicate city indices.
+
+
+
+### **4. Visualize Temperature Decay**
+Plot the **temperature decay schedule** used in Simulated Annealing to understand how the search becomes more "constrained" over time.
+
+#### Code:
+
+```{r temperature_visual}
+# Simulated Temperature Decay
+max_iter <- 1000
+T_init <- 100
+cooling_rate <- 0.99
+temperature <- numeric(max_iter)
+
+# Simulate Temperature Decay
+T <- T_init
+for (i in 1:max_iter) {
+  temperature[i] <- T
+  T <- T * cooling_rate
+}
+
+# Plot Temperature Decay
+plot(1:max_iter, temperature, type = "l", col = "orange", lwd = 2,
+     xlab = "Iteration", ylab = "Temperature",
+     main = "Temperature Decay in Simulated Annealing")
+```
+
+#### **What It Shows**:
+- The curve shows how the **temperature** decreases over iterations.
+
+- A slower cooling rate (e.g., `0.995`) leads to a gentler decay, allowing more exploration.
+
+
+
+### **5. Compare Routes Visually**
+If you run the algorithm multiple times, you can compare the **routes** visually by plotting the paths for different runs.
+
+For example:
+```{r Routes_Visually}
+# Compare Routes for Multiple Runs
+par(mfrow = c(1, 2))  # Plot 4 routes in a 2x2 grid
+
+for (i in 1:4) {
+  result <- simulated_annealing(U_ij, U_0k)
+  cat("Run:", i, "| Best Reward:", result$best_reward, "\n")
+  plot_route(result$best_route, city_coords)
+}
+par(mfrow = c(1, 1))  # Reset plot layout
+```
+
+#### **What It Shows**:
+
+- Each plot shows a route from a different run.
+
+- You can visually check if the routes are similar or significantly different.
+
+
+### **Summary of Visualizations**
+1. **Convergence Plot**: Visualize how rewards improve over iterations.
+
+2. **Bar Chart/Boxplot**: Compare best rewards across multiple runs.
+
+3. **Traveling Salesman Route**: Visualize the optimal path on a 2D plane with city coordinates.
+
+4. **Temperature Decay**: Show how the temperature decreases over time.
+
+5. **Route Comparison**: Plot routes from multiple runs for visual comparison.
+

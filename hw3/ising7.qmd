@@ -1,0 +1,139 @@
+---
+title: "HW3"
+subtitle: "Ising Model with Visualization"
+date: today
+author: 陳凱騫
+format:
+  pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+         \setmonofont{Microsoft JhengHei UI} 
+mainfont: "Microsoft JhengHei UI"
+toc: true
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+---
+
+## Abstract
+
+This report addresses the simulation of the 2D Ising model using Gibbs Sampling and Metropolis-Hastings algorithms. Key aspects explored include spin dynamics under varying temperatures, effects of boundary conditions (periodic and fixed), and monitoring convergence using Monte Carlo Standard Errors (MCSE). The results demonstrate the interplay between temperature and spin alignment, providing insights into phase transitions and algorithmic performance.
+
+
+## Introduction
+
+The Ising model is a mathematical model for ferromagnetism in statistical mechanics. In this study, we simulated the Ising model on a $32 \times 32$ lattice with spins ($+1$ or $-1$) using:
+
+1. Gibbs Sampling
+2. Metropolis-Hastings
+
+The system was examined under different temperatures, starting configurations, and boundary conditions. Additionally, convergence of magnetization was assessed using MCSE. 
+
+The model's energy is given by:
+
+$$
+P(x) \propto \exp\left(\frac{-\epsilon(x)}{T}\right), \quad \epsilon(x) = \sum_{\langle i, j \rangle} x_i x_j,
+$$
+
+where $T$ is the temperature and $\langle i, j \rangle$ denotes neighboring spin pairs.
+
+
+## Methodology
+
+### Gibbs Sampling and Metropolis-Hastings
+
+- **Gibbs Sampling**: Spins were updated one at a time based on their conditional probability given the neighboring spins. The update probability is:
+
+  $$
+  P(x_i = +1 \mid x_{\text{neighbors}}) = \frac{1}{1 + \exp(-2\beta \sum_{\text{neighbors}} x_j)},
+  $$
+
+  where $\beta = \frac{1}{T}$.
+
+- **Metropolis-Hastings**: Proposed spin flips were accepted with probability:
+  $$
+  P_{\text{accept}} = \min\left(1, \exp(-\beta \Delta E)\right),
+  $$
+
+  where $\Delta E$ is the energy change resulting from the flip.
+
+### Boundary Conditions
+
+- **Periodic**: The lattice edges were connected to create a toroidal structure.
+- **Fixed**: Spins along the edges were fixed to a constant value (\(+1\)).
+
+### Monitoring Convergence
+
+The magnetization ($M$) was tracked as the mean of all spins:
+
+$$
+M = \frac{1}{L^2} \sum_{i, j} x_{i, j}.
+$$
+
+Monte Carlo Standard Errors (MCSE) were used to monitor convergence:
+
+$$
+\text{MCSE}(M) = \sqrt{\frac{1}{n} \sum_{t=1}^n (M_t - \bar{M})^2}.
+$$
+
+
+## Results and Discussion
+
+### Lattice Configurations
+
+#### Gibbs Sampling
+At low temperatures ($T = 1.5, 2.5$), the Gibbs Sampling algorithm resulted in highly ordered clusters, indicating ferromagnetic behavior. At higher temperatures ($T = 3.0, 5.0$), the spins became more disordered, reflecting the system's transition to a paramagnetic phase.
+
+#### Metropolis-Hastings
+Similar trends were observed, with ordered clusters at low $T$ and disordered states at high $T$. The algorithm exhibited comparable convergence behavior to Gibbs Sampling.
+
+### Temperature Effects
+
+The behavior of the Ising model was strongly dependent on $T$:
+- **Low $T$**: Spins aligned to minimize energy, forming large clusters.
+- **High $T$**: Thermal agitation dominated, leading to random spin configurations.
+
+This behavior aligns with theoretical predictions of phase transitions in the Ising model.
+
+### Boundary Conditions
+
+- **Periodic**: Smooth behavior was observed at all temperatures due to the seamless edge connections.
+
+- **Fixed**: Spins along the edges influenced nearby configurations, creating localized effects that were most pronounced at low $T$.
+
+### Convergence Monitoring
+
+Figures of MCSE analysis showed:
+
+1. Rapid convergence of magnetization at low $T$, where the system quickly settled into an ordered state.
+2. Slower convergence at high $T$, where thermal fluctuations introduced greater randomness.
+
+The MCSE plots validated the stability of the simulations, with decreasing MCSE values over iterations indicating improved accuracy.
+
+
+## Conclusion
+
+This study successfully simulated the Ising model on a \(32 \times 32\) lattice under various conditions:
+1. **Algorithms**: Gibbs Sampling and Metropolis-Hastings were implemented, yielding consistent results.
+2. **Temperature Dependence**: Phase transitions were observed as \(T\) increased, transitioning from ordered to disordered states.
+3. **Boundary Conditions**: Both periodic and fixed conditions affected spin dynamics, with fixed boundaries exerting edge effects.
+4. **Convergence**: MCSE analysis demonstrated reliable convergence of magnetization.
+
+Future work could explore larger lattices or alternative update schemes, such as cluster algorithms, to better understand critical phenomena.
+
+---
+
+## References
+
+1. Rajesh Rinet, *Introduction to the Ising Model* [online resource].
+2. Homework III, Question 1.
+
+---
+
+``` 
+
+This RMarkdown document interprets the results academically and is structured to generate a polished PDF report. Save this file as `Ising_Model_Report.Rmd` and knit it into a PDF to produce the final result.

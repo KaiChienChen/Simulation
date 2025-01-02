@@ -1,0 +1,186 @@
+---
+title: "HW3"
+subtitle: "Ising model"
+date: today
+author: 陳凱騫
+format:
+ pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+         \setmonofont{Microsoft JhengHei UI} 
+mainfont: "Microsoft JhengHei UI"
+toc: true
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+---
+
+## 簡介
+
+2D Ising 模型是統計物理中經典的模型，用於研究磁性材料的相變現象。本次模擬將使用**Metropolis 演算法**，來分析能量、磁化率、比熱等隨溫度變化的行為。
+
+
+
+## **模型設定**
+
+- Ising Hamiltonian定義如下：
+\[
+H = -J \sum_{\langle i,j \rangle} S_i S_j
+\]
+其中：
+- $ S_i $ 是自旋，取值 $ \pm 1 $。
+- $ J > 0 $ 表示自旋間的交互作用。
+- $ \langle i,j \rangle $ 表示最近鄰居的交互作用。
+
+
+
+## **主要程式碼**
+
+在 R 中，我們將：
+1. 建立隨機初始自旋矩陣。
+2. 使用 Metropolis 演算法進行蒙地卡羅模擬。
+3. 計算並視覺化系統能量、磁化率、比熱等物理量。
+
+### **程式碼區段**
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r libraries}
+# 載入必要的套件
+library(ggplot2)
+library(gridExtra)
+```
+
+### **1. 初始參數與設定**
+
+```{r parameters}
+# 模型參數
+L <- 16           # 格點大小 (L x L)
+J <- 1            # 交換作用強度
+T_seq <- seq(1.5, 3.5, length.out = 40) # 溫度範圍
+steps_eq <- 1000  # 平衡步數
+steps_mc <- 1000  # 蒙地卡羅步數
+```
+
+### **2. 初始自旋配置**
+
+```{r init_state}
+initial_state <- function(L) {
+  # 隨機生成 L x L 的自旋矩陣 (-1 或 1)
+  matrix(sample(c(-1, 1), L * L, replace = TRUE), L, L)
+}
+```
+
+### **3. 計算能量與 Metropolis 演算法**
+
+```{r metropolis}
+calc_energy <- function(spin_matrix, J) {
+  # 計算總能量
+  E <- 0
+  L <- nrow(spin_matrix)
+  for (i in 1:L) {
+    for (j in 1:L) {
+      Si <- spin_matrix[i, j]
+      nb <- spin_matrix[(i %% L) + 1, j] + 
+            spin_matrix[(i - 2) %% L + 1, j] + 
+            spin_matrix[i, (j %% L) + 1] + 
+            spin_matrix[i, (j - 2) %% L + 1]
+      E <- E - J * Si * nb
+    }
+  }
+  return(E / 2) # 每個鄰居重複計算過
+}
+
+metropolis_step <- function(spin_matrix, beta, J) {
+  # Metropolis 演算法的單步更新
+  L <- nrow(spin_matrix)
+  for (k in 1:(L * L)) {
+    i <- sample(1:L, 1)
+    j <- sample(1:L, 1)
+    Si <- spin_matrix[i, j]
+    nb <- spin_matrix[(i %% L) + 1, j] + 
+          spin_matrix[(i - 2) %% L + 1, j] + 
+          spin_matrix[i, (j %% L) + 1] + 
+          spin_matrix[i, (j - 2) %% L + 1]
+    dE <- 2 * J * Si * nb
+    if (dE <= 0 || runif(1) < exp(-dE * beta)) {
+      spin_matrix[i, j] <- -Si
+    }
+  }
+  return(spin_matrix)
+}
+```
+
+### **4. 蒙地卡羅模擬與結果**
+
+```{r simulation}
+simulate_ising <- function(L, T_seq, steps_eq, steps_mc, J) {
+  E_list <- M_list <- numeric(length(T_seq))
+  for (t in 1:length(T_seq)) {
+    T <- T_seq[t]
+    beta <- 1 / T
+    spin_matrix <- initial_state(L)
+    
+    # 平衡步數
+    for (step in 1:steps_eq) {
+      spin_matrix <- metropolis_step(spin_matrix, beta, J)
+    }
+    
+    # 蒙地卡羅步數
+    E <- M <- 0
+    for (step in 1:steps_mc) {
+      spin_matrix <- metropolis_step(spin_matrix, beta, J)
+      E <- E + calc_energy(spin_matrix, J)
+      M <- M + abs(sum(spin_matrix))
+    }
+    
+    # 平均能量與磁化
+    E_list[t] <- E / steps_mc
+    M_list[t] <- M / (steps_mc * L * L)
+  }
+  return(data.frame(T = T_seq, Energy = E_list, Magnetization = M_list))
+}
+
+# 執行模擬
+results <- simulate_ising(L, T_seq, steps_eq, steps_mc, J)
+```
+
+### **5. 視覺化結果**
+
+```{r plots}
+# 能量與磁化率的變化
+p1 <- ggplot(results, aes(x = T, y = Energy)) + 
+      geom_point(color = "red") + geom_line() +
+      labs(title = "能量隨溫度變化", x = "溫度 (T)", y = "能量")
+
+p2 <- ggplot(results, aes(x = T, y = Magnetization)) + 
+      geom_point(color = "blue") + geom_line() +
+      labs(title = "磁化率隨溫度變化", x = "溫度 (T)", y = "磁化率")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+
+## **結果與討論**
+
+1. **能量 $ E $**：隨著溫度增加，系統能量逐漸趨於穩定。
+2. **磁化率 $ M $**：在低溫區域，磁化率維持較高，隨溫度接近臨界溫度 $ T_c $ 時快速下降，顯示出相變行為。
+
+
+## **結論**
+
+我們使用 Metropolis 演算法成功模擬了2D Ising模型，並觀察到了能量與磁化率隨溫度變化的趨勢。此結果與理論預測一致，證明了相變在2D Ising模型中的存在。
+
+
+### **操作步驟**
+1. 在 RStudio 中建立一個新檔案，選擇 **R Markdown**。
+2. 將上述程式碼貼上，儲存為 `ising_model_simulation.Rmd`。
+3. 點擊 **Knit** 生成 HTML 報告。
+
+這份報告將包括 Ising 模型的理論背景、程式碼、模擬結果及圖表展示。若有其他需求或修改，請隨時告訴我！

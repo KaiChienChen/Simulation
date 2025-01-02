@@ -1,0 +1,169 @@
+---
+title: "HW3"
+subtitle: "Ising Model with Visualization"
+date: today
+author: 陳凱騫
+format:
+  pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+         \setmonofont{Microsoft JhengHei UI} 
+mainfont: "Microsoft JhengHei UI"
+toc: true
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+---
+
+## 模型邏輯與程式碼
+
+```{r setup, include=FALSE}
+# 初始化 R Markdown 設置
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+```{r library}
+# 載入所需套件
+library(ggplot2)
+library(reshape2)
+library(gridExtra)
+```
+
+```{r initial}
+# 1. 參數設定與輔助函數 -----------------------------------------------------
+L <- 20                # 格點邊長 (L x L)
+J <- 1                 # 交換作用強度
+steps <- c(0, 1, 4, 32, 100, 1000) # 時間步驟
+T_values <- seq(1.5, 3.5, 0.5)     # 溫度範圍
+beta <- function(T) 1 / T          # 反溫度計算公式
+
+# 初始化隨機自旋格點
+initialize_lattice <- function(L) {
+  matrix(sample(c(-1, 1), L * L, replace = TRUE), L, L)
+}
+
+# 計算自旋反轉的能量變化
+delta_energy <- function(lattice, i, j, L) {
+  spin <- lattice[i, j]
+  neighbors <- lattice[(i %% L) + 1, j] + lattice[(i - 2) %% L + 1, j] +
+               lattice[i, (j %% L) + 1] + lattice[i, (j - 2) %% L + 1]
+  return(2 * spin * neighbors)
+}
+```
+
+```{r m_algorithm}
+# 2. Metropolis 演算法 -----------------------------------------------------
+metropolis_step <- function(lattice, beta, L) {
+  for (k in 1:(L * L)) {   # 嘗試更新 L x L 次 (一個 sweep)
+    i <- sample(1:L, 1)    # 隨機選取行
+    j <- sample(1:L, 1)    # 隨機選取列
+    dE <- delta_energy(lattice, i, j, L)  # 計算 ΔE
+    
+    # 接受或拒絕反轉自旋
+    if (dE <= 0 || runif(1) < exp(-dE * beta)) {
+      lattice[i, j] <- -lattice[i, j]  # 反轉自旋
+    }
+  }
+  return(lattice)
+}
+```
+
+```{r plot1}
+# 3. 格點視覺化函數 -----------------------------------------------------
+plot_lattice <- function(lattice, title) {
+  lattice_df <- melt(lattice)
+  colnames(lattice_df) <- c("x", "y", "spin")
+  ggplot(lattice_df, aes(x = x, y = y, fill = factor(spin))) +
+    geom_tile(color = "white") +
+    scale_fill_manual(values = c("-1" = "blue", "1" = "red")) +
+    labs(title = title, fill = "Spin") +
+    theme_void()
+}
+
+# 格點演化視覺化：不同時間步驟
+plot_lattice_evolution <- function(L, steps, beta_value) {
+  lattice <- initialize_lattice(L) # 初始隨機格點
+  plots <- list()
+  
+  for (t in 1:length(steps)) {
+    step <- steps[t]
+    for (s in 1:step) {
+      lattice <- metropolis_step(lattice, beta_value, L)
+    }
+    plots[[t]] <- plot_lattice(lattice, paste("Time =", step))
+  }
+  do.call(grid.arrange, c(plots, ncol = 3))
+}
+```
+
+```{r energy}
+# 4. 平均能量與磁化率 -----------------------------------------------------
+calc_energy <- function(lattice, J) {
+  E <- 0
+  L <- nrow(lattice)
+  for (i in 1:L) {
+    for (j in 1:L) {
+      neighbors <- lattice[(i %% L) + 1, j] + lattice[(i - 2) %% L + 1, j] +
+                   lattice[i, (j %% L) + 1] + lattice[i, (j - 2) %% L + 1]
+      E <- E - J * lattice[i, j] * neighbors
+    }
+  }
+  return(E / 2) # 避免重複計算
+}
+
+simulate_ising <- function(L, T, steps_eq, steps_mc) {
+  beta <- 1 / T
+  lattice <- initialize_lattice(L)
+  
+  # 平衡過程
+  for (step in 1:steps_eq) {
+    lattice <- metropolis_step(lattice, beta, L)
+  }
+  
+  # 蒐集數據
+  energy <- magnetization <- 0
+  for (step in 1:steps_mc) {
+    lattice <- metropolis_step(lattice, beta, L)
+    energy <- energy + calc_energy(lattice, J)
+    magnetization <- magnetization + abs(sum(lattice))
+  }
+  
+  list(Energy = energy / steps_mc, 
+       Magnetization = magnetization / (steps_mc * L^2))
+}
+
+```
+
+```{r plot2}
+# 5. 模擬與繪圖 -----------------------------------------------------
+# 5.1 繪製不同時間步驟的格點狀態
+cat("### 格點演化視覺化: 不同時間步驟\n")
+plot_lattice_evolution(L, steps, beta(2.5))
+
+# 5.2 模擬能量與磁化率隨溫度變化
+results <- data.frame(Temperature = numeric(), Energy = numeric(), Magnetization = numeric())
+
+for (T in T_values) {
+  sim <- simulate_ising(L, T, 500, 1000)  # 平衡 500 步後模擬 1000 步
+  cat(sprintf("T = %.2f, Energy = %.2f, Magnetization = %.2f\n", 
+              T, sim$Energy, sim$Magnetization))
+  results <- rbind(results, data.frame(Temperature = T, Energy = sim$Energy, Magnetization = sim$Magnetization))
+}
+
+# 5.3 繪製能量與磁化率
+p1 <- ggplot(results, aes(x = Temperature, y = Energy)) + 
+      geom_point(color = "red") + geom_line() +
+      labs(title = "能量隨溫度變化", x = "溫度 (T)", y = "能量") +
+      theme_minimal()
+
+p2 <- ggplot(results, aes(x = Temperature, y = Magnetization)) + 
+      geom_point(color = "blue") + geom_line() +
+      labs(title = "磁化率隨溫度變化", x = "溫度 (T)", y = "磁化率") +
+      theme_minimal()
+
+grid.arrange(p1, p2, ncol = 2)
+```

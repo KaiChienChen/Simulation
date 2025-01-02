@@ -1,0 +1,373 @@
+---
+title: "HW2"
+subtitle: "Lasso_beta_optimization"
+date: today
+author: H24101222_陳凱騫
+format:
+ pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+         \setmonofont{Microsoft JhengHei UI}  
+mainfont: "Microsoft JhengHei UI"
+# mainfont: "Microsoft JhengHei Bold"
+toc: true
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+  echo: true
+  warning: false
+  message: false
+---
+
+# 1. Implement the coordinate descent method to identify the optimal tuning parameter for the LASSO penalty using a cross-validation approach, and then compute the LASSO estimates for the linear regression model.
+
+首先生成一組模擬數據包含 $n = 50 $ 筆觀測值及 $p = 200 $ 個特徵，並設定前5個回歸係數為3、-3.5、4、-2.8、3.2，而其餘為零以模擬稀疏特性。
+
+接著實作 **座標下降法（Coordinate Descent）**，以逐一更新回歸係數 $\beta $ 的方式解決 LASSO 的優化問題。
+
+然後使用 $k$-摺交叉驗證（$k = 5$）來選擇正則化參數 $\lambda$。針對不同 $\lambda$ 值計算驗證集的均方誤差（MSE），
+
+以選出最佳參數。
+
+最後使用選出的最佳 $\lambda $ 值，在完整資料上重新計算回歸係數。
+其結果如下:
+
+```{r}
+#| echo: false
+# Required Libraries
+library(glmnet)
+# Step 1: Generate or load data
+set.seed(123)
+n <- 50
+p <- 200
+X <- matrix(rnorm(n * p), n, p)
+beta_true <- c(3, -3.5, 4, -2.8, 3.2, rep(0, p - 5))
+y <- X %*% beta_true + rnorm(n)
+# Step 2: Standardize the predictors
+X <- scale(X)
+
+# Step 3: Define soft-thresholding operator
+soft_threshold <- function(z, lambda) {
+  sign(z) * pmax(0, abs(z) - lambda)
+}
+
+# Step 4: Coordinate Descent Function
+coordinate_descent <- function(X, y, lambda, max_iter = 1000, tol = 1e-6) {
+  n <- nrow(X)
+  p <- ncol(X)
+  beta <- rep(0, p)
+  for (iter in 1:max_iter) {
+    beta_old <- beta
+    for (j in 1:p) {
+      r_j <- y - X %*% beta + X[, j] * beta[j]
+      beta[j] <- soft_threshold(sum(r_j * X[, j]) / n, lambda)
+    }
+    if (sqrt(sum((beta - beta_old)^2)) < tol) break
+  }
+  return(beta)
+}
+
+# Step 5: Cross-Validation for Lambda Selection
+cv_lasso <- function(X, y, lambda_seq, folds = 5) {
+  n <- nrow(X)
+  fold_ids <- sample(rep(1:folds, length.out = n))
+  cv_errors <- numeric(length(lambda_seq))
+  
+  for (i in seq_along(lambda_seq)) {
+    lambda <- lambda_seq[i]
+    fold_errors <- numeric(folds)
+    
+    for (fold in 1:folds) {
+      train_idx <- which(fold_ids != fold)
+      test_idx <- which(fold_ids == fold)
+      X_train <- X[train_idx, ]
+      y_train <- y[train_idx]
+      X_test <- X[test_idx, ]
+      y_test <- y[test_idx]
+      
+      beta <- coordinate_descent(X_train, y_train, lambda)
+      predictions <- X_test %*% beta
+      fold_errors[fold] <- mean((y_test - predictions)^2)
+    }
+    cv_errors[i] <- mean(fold_errors)
+  }
+  
+  best_lambda <- lambda_seq[which.min(cv_errors)]
+  return(list(best_lambda = best_lambda, cv_errors = cv_errors))
+}
+
+# Step 6: Run Cross-Validation
+lambda_seq <- seq(0.01, 5, length.out = 100)
+cv_results <- cv_lasso(X, y, lambda_seq)
+
+# Step 7: Compute Final Estimates with Best Lambda
+best_lambda <- cv_results$best_lambda
+final_beta <- coordinate_descent(X, y, best_lambda)
+
+# Output Results
+print(paste("Optimal Lambda:", best_lambda))
+print("Final Coefficients:")
+print(final_beta)
+
+```
+
+```{r}
+#| echo: false
+# Plot CV errors vs. Lambda
+par(mfrow = c(1, 1))
+plot(
+  lambda_seq, cv_results$cv_errors, type = "l", col = "blue", lwd = 2,
+  xlab = expression(lambda), ylab = "Cross-Validation Error",
+  main = "Cross-Validation for LASSO"
+)
+abline(v = best_lambda, col = "red", lty = 2)
+legend("topright", legend = c("CV Error", "Best Lambda"), col = c("blue", "red"), lty = c(1, 2), lwd = 2)
+
+```
+
+從上方之圖可知 $\lambda = 0.5644 $ 時可使 cv error最小。
+
+```{r}
+#| echo: false
+# Compare true coefficients and estimated coefficients
+par(mfrow = c(1, 2))
+
+# True coefficients
+plot(
+  beta_true, type = "h", col = "darkgreen", lwd = 2,
+  xlab = "Index", ylab = "Coefficient Value",
+  main = "True Coefficients"
+)
+
+# Estimated coefficients
+plot(
+  final_beta, type = "h", col = "blue", lwd = 2,
+  xlab = "Index", ylab = "Coefficient Value",
+  main = "Estimated Coefficients"
+)
+```
+
+接著也可從上方之圖可看出其coordinate descent所選出來的大致是正確的，前五個beta都無趨近於0，
+
+其餘的大部分都接近0。
+
+# 2. Using the same tuning parameter, apply Particle Swarm Optimization (PSO) to calculate the LASSO estimates. Beyond the default PSO parameters, evaluate the impact of particle size and the number of iterations on the results. 
+
+
+## **演算法步驟**
+
+1. **初始化**：
+   - 在解空間內隨機生成粒子的位置和速度。
+   - 計算初始個人最佳和全局最佳分數。
+2. **粒子更新**：
+   - 使用公式更新速度：
+    $$
+     v_i = w \cdot v_i + c_1 \cdot r_1 \cdot (p_i - x_i) + c_2 \cdot r_2 \cdot (g - x_i)
+    $$
+    其中：
+    - $w$ ：慣性權重。
+    - $c_1, c_2$ ：個人與全局吸引力係數。
+    - $r_1, r_2$ ：隨機數。
+   - 根據速度更新位置，並檢查是否超出邊界。
+
+3. **動態重置**：
+   - 如果粒子多次接觸邊界，則重置位置至全局最佳附近。
+   - Note: 之所以如此設定是因為在無此設定之前，最後的到 $\beta$ 之結果許多的 $\beta$ 值卡在邊界。
+
+4. **適應度評估**：
+   - 計算每個粒子的目標函數值。
+   - 更新個人最佳與全局最佳。
+
+5. **終止條件**：
+   - 達到最大迭代次數，或全局最佳分數在多次迭代內無顯著變化。
+
+## **參數設置**
+
+- **粒子群大小**：200。
+- **最大迭代次數**：10000。
+- **位置邊界**：$[-5, 5]$。
+- **動態慣性權重**：從 0.9 緩減至 0.4。(發現動態的效果比較好，可能因為平衡了全局與局部搜索的能力)
+
+最終結果如下，可看到大部分都收斂到0，只有前5個 $\beta$ 和少部分之值無收斂到0:
+
+```{r}
+#| echo: false
+lasso_objective <- function(beta, X, y, lambda) {
+  n <- nrow(X)
+  mse <- sum((y - X %*% beta)^2) / (2 * n)
+  penalty <- lambda * sum(abs(beta))
+  return(mse + penalty)
+}
+```
+
+```{r}
+#| echo: false
+pso_lasso_improved <- function(X, y, lambda, swarm_size = 100, max_iter = 15000, 
+                               w_start = 0.9, w_end = 0.4, 
+                               c1 = 1, c2 = 1, 
+                               lower_bound = -5, upper_bound = 5) {
+  p <- ncol(X)
+  # 初始化粒子
+  positions <- matrix(runif(swarm_size * p, lower_bound, upper_bound), nrow = swarm_size, ncol = p)
+  velocities <- matrix(runif(swarm_size * p, -1, 1), nrow = swarm_size, ncol = p)
+  reset_counters <- rep(0, swarm_size)  # 重置計數器
+
+  # 初始化個人最佳和全局最佳
+  personal_best_positions <- positions
+  personal_best_scores <- apply(personal_best_positions, 1, function(beta) lasso_objective(beta, X, y, lambda))
+  global_best_position <- personal_best_positions[which.min(personal_best_scores), ]
+  global_best_score <- min(personal_best_scores)
+  
+  # 主迴圈
+  for (iter in 1:max_iter) {
+    # 動態更新慣性權重
+    w <- w_start - iter / max_iter * (w_start - w_end)
+    
+    for (i in 1:swarm_size) {
+      # 更新速度
+      r1 <- runif(p)
+      r2 <- runif(p)
+      velocities[i, ] <- w * velocities[i, ] +
+        c1 * r1 * (personal_best_positions[i, ] - positions[i, ]) +
+        c2 * r2 * (global_best_position - positions[i, ])
+      
+      # 更新位置
+      positions[i, ] <- positions[i, ] + velocities[i, ]
+      positions[i, ] <- pmax(pmin(positions[i, ], upper_bound), lower_bound)  # 確保邊界
+      
+      # 邊界檢查
+      at_boundary <- (positions[i, ] == lower_bound | positions[i, ] == upper_bound)
+      if (any(at_boundary)) reset_counters[i] <- reset_counters[i] + 1 else reset_counters[i] <- 0
+
+      # 動態重置
+      reset_threshold <- round(5 + iter / 1000)  # 動態閥值
+      if (reset_counters[i] >= reset_threshold) {
+        positions[i, ] <- global_best_position + runif(p, -0.1, 0.1)  # 附近隨機初始化
+        velocities[i, ] <- runif(p, -0.5, 0.5)
+        reset_counters[i] <- 0
+      }
+
+      # 適應度計算
+      score <- lasso_objective(positions[i, ], X, y, lambda)
+      
+      # 更新個人最佳
+      if (score < personal_best_scores[i]) {
+        personal_best_positions[i, ] <- positions[i, ]
+        personal_best_scores[i] <- score
+      }
+      
+      # 更新全局最佳
+      if (score < global_best_score) {
+        global_best_position <- positions[i, ]
+        global_best_score <- score
+      }
+    }
+    
+    # 可選：每 1000 次迭代打印一次進度
+    if (iter %% 1000 == 0) {
+      cat(sprintf("Iteration %d, Best Score: %f\n", iter, global_best_score))
+    }
+  }
+  
+  return(list(beta = global_best_position, score = global_best_score))
+}
+# Example: Testing the improved PSO
+set.seed(123)
+n <- 50
+p <- 200
+X <- matrix(rnorm(n * p), n, p)
+beta_true <- c(3, -3.5, 4, -2.8, 3.2, rep(0, p - 5))
+y <- X %*% beta_true + rnorm(n)
+lambda <- 0.5644444
+result <- pso_lasso_improved(X, y, lambda, swarm_size = 200, max_iter = 10000)
+# Output results
+cat("Optimized Coefficients (PSO-LASSO with Reset):\n")
+print(result$beta)
+```
+
+```{r}
+#| echo: false
+pso_lasso_visualize <- function(X, y, lambda, swarm_size = 100, max_iter = 1000,
+                                w_start = 0.9, w_end = 0.4,
+                                c1 = 1, c2 = 1, lower_bound = -5, upper_bound = 5) {
+  p <- ncol(X)
+  positions <- matrix(runif(swarm_size * p, lower_bound, upper_bound), nrow = swarm_size, ncol = p)
+  velocities <- matrix(runif(swarm_size * p, -1, 1), nrow = swarm_size, ncol = p)
+  
+  personal_best_positions <- positions
+  personal_best_scores <- apply(personal_best_positions, 1, function(beta) lasso_objective(beta, X, y, lambda))
+  global_best_position <- personal_best_positions[which.min(personal_best_scores), ]
+  global_best_score <- min(personal_best_scores)
+  
+  # 收集數據
+  best_scores <- numeric(max_iter)  # 每次迭代的全局最佳分數
+  position_snapshots <- list()     # 保存粒子位置
+  
+  for (iter in 1:max_iter) {
+    w <- w_start - iter / max_iter * (w_start - w_end)
+    for (i in 1:swarm_size) {
+      r1 <- runif(p)
+      r2 <- runif(p)
+      velocities[i, ] <- w * velocities[i, ] +
+        c1 * r1 * (personal_best_positions[i, ] - positions[i, ]) +
+        c2 * r2 * (global_best_position - positions[i, ])
+      positions[i, ] <- positions[i, ] + velocities[i, ]
+      positions[i, ] <- pmax(pmin(positions[i, ], upper_bound), lower_bound)
+      
+      score <- lasso_objective(positions[i, ], X, y, lambda)
+      if (score < personal_best_scores[i]) {
+        personal_best_positions[i, ] <- positions[i, ]
+        personal_best_scores[i] <- score
+      }
+      if (score < global_best_score) {
+        global_best_position <- positions[i, ]
+        global_best_score <- score
+      }
+    }
+    
+    # 收集當前迭代的數據
+    best_scores[iter] <- global_best_score
+    position_snapshots[[iter]] <- positions
+  }
+  
+  return(list(best_scores = best_scores, position_snapshots = position_snapshots))
+}
+
+# 目標函數
+lasso_objective <- function(beta, X, y, lambda) {
+  n <- nrow(X)
+  rss <- sum((y - X %*% beta)^2) / (2 * n)
+  penalty <- lambda * sum(abs(beta))
+  return(rss + penalty)
+}
+
+# 執行 PSO 並記錄數據
+set.seed(123)
+n <- 50
+p <- 200
+X <- matrix(rnorm(n * p), n, p)
+beta_true <- c(3, -3.5, 4, -2.8, 3.2, rep(0, p - 5))
+y <- X %*% beta_true + rnorm(n)
+lambda <- 0.5644444
+
+result <- pso_lasso_visualize(X, y, lambda, swarm_size = 200, max_iter = 10000)
+
+# 視覺化
+library(ggplot2)
+
+# 1. 全局最佳分數收斂曲線
+best_scores <- result$best_scores
+df_scores <- data.frame(iteration = 1:length(best_scores), best_score = best_scores)
+
+ggplot(df_scores, aes(x = iteration, y = best_score)) +
+  geom_line(color = "blue") +
+  labs(title = "Global Best Score Over Iterations", x = "Iteration", y = "Best Score") +
+  theme_minimal()
+
+```
+
+而從上圖也可看到其Best Score有持續在降低。

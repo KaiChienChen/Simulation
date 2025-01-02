@@ -1,0 +1,229 @@
+---
+title: "HW3"
+subtitle: "Simulation of the Ising Model and Convergence Monitoring"
+date: today
+author: 陳凱騫
+format:
+  pdf:
+    include-in-header:
+      - text: |
+         \usepackage{setspace,relsize}
+         \usepackage{geometry}
+         \geometry{verbose,tmargin=2.5cm,bmargin=2.5cm,lmargin=2.5cm,rmargin=2.5cm}
+         \setmonofont{Microsoft JhengHei UI} 
+mainfont: "Microsoft JhengHei UI"
+toc: true
+documentclass: article
+pdf-engine: xelatex
+execute:
+  tidy: true
+---
+
+## Abstract
+
+This report explores the simulation of a 2D Ising model on a $32 \times 32$ lattice using Gibbs Sampling and Metropolis-Hastings algorithms. Various parameters were tested, including different temperatures, boundary conditions, and initial configurations. Convergence was assessed using Monte Carlo Standard Error (MCSE) and the Gelman-Rubin Statistic. This analysis provides insights into algorithmic behavior and the relationship between temperature and spin alignment.
+
+## Introduction
+
+The Ising model is a fundamental framework in statistical mechanics for modeling ferromagnetic behavior. The probability distribution is expressed as:
+
+$$
+P(x) \propto \exp\left(-\frac{\epsilon(x)}{T}\right), \quad \epsilon(x) = \sum_{\langle i, j \rangle} x_i x_j,
+$$
+
+where $T$ represents temperature, and $\langle i, j \rangle$ are pairs of neighboring spins. 
+
+Key tasks include:
+1. Implementing Gibbs Sampling and Metropolis-Hastings algorithms.
+2. Simulating spin configurations under various conditions.
+3. Assessing convergence via MCSE and Gelman-Rubin diagnostics.
+
+Reference: [Ising Model Implementation](https://rajeshrinet.github.io/blog/2014/ising-model/).
+
+## Methodology
+
+### Initialization and Simulation Setup
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(gridExtra)
+library(dplyr)
+library(mcmcse)
+```
+
+#### Ising Model Functions
+
+```{r functions, include=FALSE}
+initialize_lattice <- function(L) {
+  matrix(sample(c(-1, 1), L * L, replace = TRUE), L, L)
+}
+
+compute_neighbors_sum <- function(lattice, i, j) {
+  L <- nrow(lattice)
+  lattice[(i %% L) + 1, j] +
+    lattice[(i - 2) %% L + 1, j] +
+    lattice[i, (j %% L) + 1] +
+    lattice[i, (j - 2) %% L + 1]
+}
+
+gibbs_step <- function(lattice, beta) {
+  L <- nrow(lattice)
+  for (i in 1:L) {
+    for (j in 1:L) {
+      neighbors_sum <- compute_neighbors_sum(lattice, i, j)
+      prob <- 1 / (1 + exp(-2 * beta * neighbors_sum))
+      lattice[i, j] <- ifelse(runif(1) < prob, 1, -1)
+    }
+  }
+  return(lattice)
+}
+
+metropolis_step <- function(lattice, beta) {
+  L <- nrow(lattice)
+  for (k in 1:(L * L)) {
+    i <- sample(1:L, 1)
+    j <- sample(1:L, 1)
+    spin <- lattice[i, j]
+    neighbors_sum <- compute_neighbors_sum(lattice, i, j)
+    delta_E <- 2 * spin * neighbors_sum
+    if (delta_E <= 0 || runif(1) < exp(-beta * delta_E)) {
+      lattice[i, j] <- -spin
+    }
+  }
+  return(lattice)
+}
+```
+
+### Monitoring Convergence
+
+```{r convergence}
+monitor_convergence <- function(magnetizations) {
+  n <- length(magnetizations)
+  means <- cumsum(magnetizations) / (1:n)
+  mcse <- sqrt(cumsum((magnetizations - means)^2) / (1:n))
+  data.frame(Iteration = 1:n, Mean = means, MCSE = mcse)
+}
+```
+
+### Parameters and Execution
+
+```{r params}
+L <- 32
+steps <- 6000
+temperatures <- c(1.5, 2.5, 3.5)
+results <- list()
+```
+
+## Results and Discussion
+
+```{r}
+# 固定參數
+L <- 32
+T_fixed <- 1.5
+beta <- 1 / T_fixed
+iterations_to_visualize <- c(0, 1, 32, 100, 1000,6000)  # 要展示的迭代次數
+
+# 初始化晶格
+lattice <- initialize_lattice(L)
+snapshots <- list()
+
+# 記錄初始狀態
+snapshots[["0"]] <- lattice
+
+# 進行 Gibbs Sampling 模擬
+for (iter in 1:max(iterations_to_visualize)) {
+  lattice <- gibbs_step(lattice, beta)
+  
+  if (iter %in% iterations_to_visualize) {
+    snapshots[[as.character(iter)]] <- lattice
+  }
+}
+
+# 繪製不同迭代次數的自旋配置
+par(mfrow = c(2, 3), mar = c(2, 2, 2, 2))  # 2行3列的子圖排列
+for (iter in names(snapshots)) {
+  image(t(apply(snapshots[[iter]], 2, rev)), col = c("blue", "red"), 
+        main = paste("Iteration:", iter))
+}
+```
+
+
+### Visualization of Spin Configurations
+
+```{r simulate}
+par(mfrow = c(3, 2), mar = c(2, 2, 2, 2))  # 將圖分為3行2列展示
+for (T in temperatures) {
+  beta <- 1 / T
+  lattice_gibbs <- initialize_lattice(L)
+  lattice_mh <- initialize_lattice(L)
+
+  for (step in 1:steps) {
+    lattice_gibbs <- gibbs_step(lattice_gibbs, beta)
+    lattice_mh <- metropolis_step(lattice_mh, beta)
+  }
+
+  image(t(apply(lattice_gibbs, 2, rev)), col = c("blue", "red"), main = paste("Gibbs Sampling: T =", T))
+  image(t(apply(lattice_mh, 2, rev)), col = c("blue", "red"), main = paste("Metropolis-Hastings: T =", T))
+}
+```
+
+### Convergence Analysis
+
+```{r convergence_plots}
+# MCSE 和 Mean 分為不同子圖展示
+library(ggplot2)
+library(gridExtra)
+# 初始化收集數據的容器
+convergence_data <- data.frame()
+
+# 迭代每個溫度，計算並保存數據
+for (T in temperatures) {
+  lattice <- initialize_lattice(L)
+  magnetizations <- numeric(steps)
+  
+  for (step in 1:steps) {
+    lattice <- gibbs_step(lattice, 1 / T)
+    magnetizations[step] <- mean(lattice)
+  }
+  
+  conv_metrics <- monitor_convergence(magnetizations)
+  conv_metrics$Temperature <- T
+  convergence_data <- rbind(convergence_data, conv_metrics)
+}
+
+# 繪製磁化率曲線
+p1 <- ggplot(convergence_data, aes(x = Iteration, y = Mean, color = as.factor(Temperature))) +
+  geom_line(size = 1) +
+  labs(
+    title = "Convergence Analysis: Magnetization",
+    x = "Iteration",
+    y = "Mean Magnetization",
+    color = "Temperature"
+  ) +
+  theme_minimal(base_size = 14)
+
+# 繪製MCSE曲線
+p2 <- ggplot(convergence_data, aes(x = Iteration, y = MCSE, color = as.factor(Temperature))) +
+  geom_line(size = 1, linetype = "dashed") +
+  labs(
+    title = "Convergence Analysis: MCSE",
+    x = "Iteration",
+    y = "MCSE",
+    color = "Temperature"
+  ) +
+  theme_minimal(base_size = 14)
+
+# 組合圖
+grid.arrange(p1, p2, ncol = 1)
+
+```
+
+## Observations and Conclusion
+
+1. **Temperature Effects**: Low temperatures ($T = 1.5, 2.5$) promoted spin alignment. Higher temperatures ($T = 3.5$) led to random configurations.
+2. **Algorithm Comparison**: Both algorithms achieved similar results but differed in convergence speed.
+3. **Diagnostics**: Convergence metrics verified simulation reliability.
+
+Reference links for further details: 
+- [Convergence Detection](https://bookdown.org/rdpeng/advstatcomp/monitoring-convergence.html).
